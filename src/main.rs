@@ -5,7 +5,7 @@ mod fetch;
 mod package;
 mod patch;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use cli::Args;
 use std::path::{Path, PathBuf};
@@ -114,7 +114,7 @@ fn main() -> Result<()> {
 
 // ── source-specific acquisition ───────────────────────────────────────────────
 
-fn acquire_msix(path: &PathBuf, build_dir: &Path) -> Result<(PathBuf, PathBuf, String)> {
+fn acquire_msix(path: &Path, build_dir: &Path) -> Result<(PathBuf, PathBuf, String)> {
     section("Validate Payload");
     if !path.exists() {
         bail!(

@@ -11,8 +11,8 @@
 // S = 4 + P_padded, where P_padded = roundUp(P, 4)
 // data starts at byte offset: 8 + S = 16 + roundUp(json_len, 4)
 
-use anyhow::{bail, Context, Result};
-use serde_json::{json, Value};
+use anyhow::{Context, Result, bail};
+use serde_json::{Value, json};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
@@ -86,7 +86,7 @@ fn extract_dir(data: &[u8], base: usize, dir: &Path, node: &Value) -> Result<()>
 
 pub fn pack(src_dir: &Path, dest_asar: &Path) -> Result<()> {
     let mut file_data: Vec<u8> = Vec::new();
-    let files_node = build_tree(src_dir, src_dir, &mut file_data)?;
+    let files_node = build_tree(src_dir, &mut file_data)?;
     let header = json!({ "files": files_node });
 
     let header_json = serde_json::to_string(&header)?;
@@ -117,7 +117,7 @@ pub fn pack(src_dir: &Path, dest_asar: &Path) -> Result<()> {
     Ok(())
 }
 
-fn build_tree(base: &Path, dir: &Path, data: &mut Vec<u8>) -> Result<Value> {
+fn build_tree(dir: &Path, data: &mut Vec<u8>) -> Result<Value> {
     let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
     entries.sort_by_key(|e| e.file_name());
 
@@ -128,7 +128,7 @@ fn build_tree(base: &Path, dir: &Path, data: &mut Vec<u8>) -> Result<Value> {
         let meta = std::fs::symlink_metadata(&path)?;
 
         if meta.is_dir() {
-            let child_files = build_tree(base, &path, data)?;
+            let child_files = build_tree(&path, data)?;
             map.insert(name, json!({ "files": child_files }));
         } else if meta.is_file() {
             let offset = data.len();

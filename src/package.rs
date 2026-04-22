@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 pub const PACKAGE_NAME: &str = "chatgpt-desktop-native";
-const DESCRIPTION: &str =
-    "ChatGPT desktop app repackaged from the official Windows MSIX into a native Linux Electron package";
+const DESCRIPTION: &str = "ChatGPT desktop app repackaged from the official Windows MSIX into a native Linux Electron package";
 
 // ── filesystem helpers ────────────────────────────────────────────────────────
 
@@ -94,7 +93,7 @@ echo "  chatgpt-alt -> $(xdg-mime query default x-scheme-handler/chatgpt-alt)"
     // icon
     let icon_src = assets_dir.join("AppList.targetsize-256.png");
     if icon_src.exists() {
-        std::fs::copy(&icon_src, &icon_dir.join(format!("{PACKAGE_NAME}.png")))?;
+        std::fs::copy(&icon_src, icon_dir.join(format!("{PACKAGE_NAME}.png")))?;
     }
 
     // desktop entry
@@ -254,7 +253,7 @@ pub fn build_rpm(
 fn find_rpm(rpm_root: &Path) -> Result<PathBuf> {
     for entry in WalkDir::new(rpm_root.join("RPMS")) {
         let entry = entry?;
-        if entry.path().extension().map_or(false, |e| e == "rpm") {
+        if entry.path().extension().is_some_and(|e| e == "rpm") {
             return Ok(entry.path().to_owned());
         }
     }

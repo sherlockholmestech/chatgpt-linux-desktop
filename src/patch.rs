@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::Path;
 
 // Each tuple is (exact string to find, replacement). Order matters.
@@ -10,6 +10,10 @@ const PATCHES: &[(&str, &str)] = &[
     (
         "if (_ua)\n    return u();",
         "if (_ua || oqa_linux)\n    return u();",
+    ),
+    (
+        "  getBuildOsIdentifier() {\n    return `Mac OS X ${hu.release()}`;\n  }",
+        "  getBuildOsIdentifier() {\n    return process.platform === \"linux\" ? `Linux ${hu.release()}` : `Mac OS X ${hu.release()}`;\n  }",
     ),
     (
         "  applyMainWindowStyle(u) {\n    u.setVibrancy(\"sidebar\");\n  }",
