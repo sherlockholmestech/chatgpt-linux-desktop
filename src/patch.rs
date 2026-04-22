@@ -20,10 +20,17 @@ const PATCHES: &[(&str, &str)] = &[
         "  applyCompanionWindowStyle(u) {\n    process.platform === \"darwin\" && u.setVibrancy(\"hud\");\n  }",
     ),
     (
+        "  createTray() {\n    const u = jnr.createFromPath(Tg.join(oor(), \"TrayTemplate.png\"));\n    return this.tray = new znr(u), this.tray;\n  }",
+        "  createTray() {\n    const u = process.platform === \"linux\" ? $Ye() : jnr.createFromPath(Tg.join(oor(), \"TrayTemplate.png\"));\n    return this.tray = new znr(u), this.tray;\n  }",
+    ),
+    (
         "function jpa() {\n  try {",
         "function jpa() {\n  if (process.platform === \"linux\")\n    return hu.hostname();\n  try {",
     ),
-    
+    (
+        "function $Ye() {\n  const e = pca() === \"dark\" ? \"TrayDark.ico\" : \"TrayLight.ico\";\n  return jnr.createFromPath(Tg.join(oor(), e));\n}",
+        "function $Ye() {\n  if (process.platform === \"linux\") {\n    const assetDir = Tg.resolve(process.resourcesPath, \"..\", \"..\", \"assets\");\n    return jnr.createFromPath(Tg.join(assetDir, \"TrayTemplateDark.png\"));\n  }\n  const e = pca() === \"dark\" ? \"TrayDark.ico\" : \"TrayLight.ico\";\n  return jnr.createFromPath(Tg.join(oor(), e));\n}",
+    ),
 ];
 
 /// Find the vite-built main JS in `app_dir/.vite/build/main-*.js`.

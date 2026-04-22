@@ -144,33 +144,13 @@ fn acquire_msix(path: &PathBuf, build_dir: &Path) -> Result<(PathBuf, PathBuf, S
 }
 
 fn apply_custom_icons(assets: &Path) -> Result<()> {
-    let icon_cmd = if which::which("magick").is_ok() {
-        "magick"
-    } else {
-        which::which("convert").context(
-            "ImageMagick not found — install it (e.g. apt install imagemagick)",
-        )?;
-        "convert"
-    };
+    // Tray icon (dark variant works on both light and dark panels)
+    std::fs::write(assets.join("TrayTemplateDark.png"), ICON_32_PNG)
+        .with_context(|| "writing TrayTemplateDark.png")?;
 
-    let tmp = assets.join("_tray_tmp.png");
-    std::fs::write(&tmp, ICON_32_PNG)
-        .with_context(|| format!("writing {}", tmp.display()))?;
-
-    for name in ["TrayDark.ico", "TrayLight.ico"] {
-        let dest = assets.join(name);
-        let status = std::process::Command::new(icon_cmd)
-            .arg(&tmp)
-            .arg(&dest)
-            .status()
-            .with_context(|| format!("running {icon_cmd} to create {name}"))?;
-        if !status.success() {
-            anyhow::bail!("{icon_cmd} failed while creating {name}");
-        }
-    }
-    let _ = std::fs::remove_file(&tmp);
-
+    // Desktop icon
     std::fs::write(assets.join("AppList.targetsize-256.png"), ICON_256_PNG)
-        .with_context(|| "writing custom AppList icon")?;
+        .with_context(|| "writing desktop icon")?;
+
     Ok(())
 }

@@ -206,8 +206,6 @@ pub fn build_rpm(
              License:        Proprietary\n\
              BuildArch:      x86_64\n\
              Packager:       {maintainer}\n\
-             AutoReqProv:    no\n\
-             Requires:       gtk3, nss, libXScrnSaver, alsa-lib, mesa-libgbm, libxshmfence, libdrm, libxkbcommon\n\
              \n\
              %description\n\
              {DESCRIPTION}\n\
