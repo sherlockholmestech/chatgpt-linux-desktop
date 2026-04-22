@@ -33,10 +33,14 @@ The binary will be at `target/release/chatgpt-linux-desktop`.
 
 ## Usage
 
+```bash
+chatgpt-linux-desktop [OPTIONS]
+```
+
 ### Basic — auto-fetch MSIX and build RPM
 
 ```bash
-cargo run --release
+chatgpt-linux-desktop
 ```
 
 This will:
@@ -50,25 +54,25 @@ Output goes into `dist/` by default.
 ### Provide your own MSIX
 
 ```bash
-cargo run --release -- --msix /path/to/ChatGPT.msixbundle
+chatgpt-linux-desktop --msix /path/to/ChatGPT.msixbundle
 ```
 
 ### Build DEB instead
 
 ```bash
-cargo run --release -- --format deb
+chatgpt-linux-desktop --format deb
 ```
 
 ### Build both DEB and RPM
 
 ```bash
-cargo run --release -- --format both
+chatgpt-linux-desktop --format both
 ```
 
 ### Specify output directory
 
 ```bash
-cargo run --release -- --out-dir ./output
+chatgpt-linux-desktop --out-dir ./output
 ```
 
 ### Keep build artifacts
@@ -76,20 +80,20 @@ cargo run --release -- --out-dir ./output
 By default the tool cleans up its temporary build directory after a successful run. Keep it with:
 
 ```bash
-cargo run --release -- --no-clean
+chatgpt-linux-desktop --no-clean
 ```
 
 ### Custom maintainer
 
 ```bash
-cargo run --release -- --maintainer "Your Name <you@example.com>"
+chatgpt-linux-desktop --maintainer "Your Name <you@example.com>"
 ```
 
 Or set the `MAINTAINER` environment variable:
 
 ```bash
 export MAINTAINER="Your Name <you@example.com>"
-cargo run --release
+chatgpt-linux-desktop
 ```
 
 ---
