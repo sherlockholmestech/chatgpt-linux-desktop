@@ -5,6 +5,7 @@ use walkdir::WalkDir;
 
 pub const PACKAGE_NAME: &str = "chatgpt-desktop-native";
 const DESCRIPTION: &str = "ChatGPT desktop app repackaged from the official Windows MSIX into a native Linux Electron package";
+const DESKTOP_FILE: &str = "chatgpt-desktop-native.desktop";
 
 // ── filesystem helpers ────────────────────────────────────────────────────────
 
@@ -59,7 +60,13 @@ pub fn stage(electron_dir: &Path, assets_dir: &Path, work_dir: &Path) -> Result<
     std::fs::create_dir_all(&icon_dir)?;
 
     // electron binaries + app.asar already packed inside
-    copy_dir(electron_dir, &install_root.join("electron"))?;
+    let electron_install_dir = install_root.join("electron");
+    copy_dir(electron_dir, &electron_install_dir)?;
+    let generic_electron = electron_install_dir.join("electron");
+    if generic_electron.exists() {
+        std::fs::rename(&generic_electron, electron_install_dir.join(PACKAGE_NAME))
+            .with_context(|| format!("renaming {}", generic_electron.display()))?;
+    }
     // official app assets (icons, sounds, etc.)
     copy_dir(assets_dir, &install_root.join("assets"))?;
 
@@ -67,7 +74,7 @@ pub fn stage(electron_dir: &Path, assets_dir: &Path, work_dir: &Path) -> Result<
     write_exec(
         &bin_dir.join(PACKAGE_NAME),
         &format!(
-            "#!/usr/bin/env bash\nset -euo pipefail\nexec /opt/{PACKAGE_NAME}/electron/electron --no-sandbox \"$@\"\n"
+            "#!/usr/bin/env bash\nset -euo pipefail\nexport CHROME_DESKTOP={DESKTOP_FILE}\nexec /opt/{PACKAGE_NAME}/electron/{PACKAGE_NAME} --no-sandbox --class={PACKAGE_NAME} \"$@\"\n"
         ),
     )?;
 
@@ -81,8 +88,8 @@ if ! command -v xdg-mime >/dev/null 2>&1; then
   echo "xdg-mime not found" >&2
   exit 1
 fi
-xdg-mime default "{PACKAGE_NAME}.desktop" x-scheme-handler/chatgpt
-xdg-mime default "{PACKAGE_NAME}.desktop" x-scheme-handler/chatgpt-alt
+xdg-mime default "{DESKTOP_FILE}" x-scheme-handler/chatgpt
+xdg-mime default "{DESKTOP_FILE}" x-scheme-handler/chatgpt-alt
 echo "Registered URL handlers:"
 echo "  chatgpt -> $(xdg-mime query default x-scheme-handler/chatgpt)"
 echo "  chatgpt-alt -> $(xdg-mime query default x-scheme-handler/chatgpt-alt)"
@@ -98,7 +105,7 @@ echo "  chatgpt-alt -> $(xdg-mime query default x-scheme-handler/chatgpt-alt)"
 
     // desktop entry
     write_file(
-        &app_dir.join(format!("{PACKAGE_NAME}.desktop")),
+        &app_dir.join(DESKTOP_FILE),
         &format!(
             "[Desktop Entry]\n\
              Name=ChatGPT\n\
@@ -108,8 +115,8 @@ echo "  chatgpt-alt -> $(xdg-mime query default x-scheme-handler/chatgpt-alt)"
              Type=Application\n\
              Terminal=false\n\
              Categories=Utility;\n\
-             StartupWMClass=electron\n\
-             X-GNOME-WMClass=electron\n\
+             StartupWMClass={PACKAGE_NAME}\n\
+             X-GNOME-WMClass={PACKAGE_NAME}\n\
              MimeType=x-scheme-handler/chatgpt;x-scheme-handler/chatgpt-alt;\n"
         ),
     )?;
