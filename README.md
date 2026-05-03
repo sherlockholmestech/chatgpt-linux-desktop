@@ -1,16 +1,18 @@
 # chatgpt-linux-desktop
 
-Repack the official ChatGPT Windows MSIX into a native Linux (Fedora/openSUSE) Electron package.
+Repack the official ChatGPT Windows MSIX into a native Linux Electron package.
 
-This tool downloads the official ChatGPT Windows MSIX/MSIXBundle, extracts the app and its assets, patches the JavaScript bundle to work on Linux, and bundles it into a native Linux package (DEB or RPM).
+This tool downloads the official ChatGPT Windows MSIX/MSIXBundle, extracts the app and its assets, patches the JavaScript bundle to work on Linux, and bundles it into a native Linux package (Arch, DEB, or RPM).
 
 ---
 
 ## Prerequisites
 
 - **Rust** (latest stable)
-- **dpkg-dev** (for DEB builds) or **rpmbuild** (for RPM builds)
+- **libarchive/bsdtar** (for Arch builds), **dpkg-dev** (for DEB builds), or **rpmbuild** (for RPM builds)
   ```bash
+  # Arch Linux
+  sudo pacman -S libarchive
   # Fedora
   sudo dnf install rpm-build
   # Ubuntu/Debian
@@ -37,7 +39,7 @@ The binary will be at `target/release/chatgpt-linux-desktop`.
 chatgpt-linux-desktop [OPTIONS]
 ```
 
-### Basic — auto-fetch MSIX and build RPM
+### Basic — auto-fetch MSIX and build Arch package
 
 ```bash
 chatgpt-linux-desktop
@@ -47,9 +49,12 @@ This will:
 1. Download the latest ChatGPT MSIX from the Microsoft Store via rg-adguard
 2. Extract the app and assets
 3. Patch the JavaScript for Linux compatibility
-4. Download Electron and bundle everything into an RPM
+4. Download Electron and bundle everything into an Arch package
 
-Output goes into `dist/` by default.
+All build work goes under `dist/` by default:
+- `dist/cache/` stores downloaded MSIX and Electron files
+- `dist/build-tmp/` stores unpacked and staged build files
+- finished packages are written directly to `dist/`
 
 ### Provide your own MSIX
 
@@ -63,7 +68,13 @@ chatgpt-linux-desktop --msix /path/to/ChatGPT.msixbundle
 chatgpt-linux-desktop --format deb
 ```
 
-### Build both DEB and RPM
+### Build RPM instead
+
+```bash
+chatgpt-linux-desktop --format rpm
+```
+
+### Build Arch, DEB, and RPM
 
 ```bash
 chatgpt-linux-desktop --format both
@@ -77,7 +88,7 @@ chatgpt-linux-desktop --out-dir ./output
 
 ### Keep build artifacts
 
-By default the tool cleans up its temporary build directory after a successful run. Keep it with:
+By default the tool cleans up `dist/build-tmp/` after a successful run. Downloaded files remain in `dist/cache/` for reuse. Keep the temporary build directory with:
 
 ```bash
 chatgpt-linux-desktop --no-clean
@@ -118,7 +129,7 @@ chatgpt-linux-desktop
    - `TrayTemplateDark.png` (32×32, used for the tray)
    - `AppList.targetsize-256.png` (256×256, used for the desktop/menus icon)
 
-7. **Build package** — Produces a DEB or RPM installer.
+7. **Build package** — Produces an Arch, DEB, or RPM installer.
 
 ---
 
@@ -130,8 +141,8 @@ chatgpt-linux-desktop
 | `--store-query QUERY`       | Microsoft Store URL                    | Query passed to rg-adguard for auto-fetch                |
 | `--ring`                    | `retail`                               | Update ring: `retail`, `rp`, `wif`, `wis`               |
 | `--version VERSION`         | detected from MSIX                     | Override package version string                          |
-| `--out-dir DIR`             | `dist`                                 | Output directory for built packages                       |
-| `--format FORMAT`           | `rpm`                                  | Package format: `deb`, `rpm`, `both`                     |
+| `--out-dir DIR`             | `dist`                                 | Output directory for downloads, unpacking, staging, and built packages |
+| `--format FORMAT`           | `arch`                                 | Package format: `arch`, `deb`, `rpm`, `both`             |
 | `--electron-version VERSION`| `41.2.2`                               | Electron version to bundle from GitHub releases         |
 | `--maintainer STRING`       | `Local Build`                          | Maintainer string for the package                        |
 | `--no-clean`                | false                                  | Keep the temporary build directory after completion      |
@@ -152,13 +163,13 @@ The JavaScript patch makes Linux use `process.resourcesPath` to locate the real 
 
 ## Dependencies
 
-Runtime dependencies for the built package (declared in `DEBIAN/control` and the RPM spec):
+Runtime dependencies for the built package (declared in Arch `.PKGINFO`, `DEBIAN/control`, and the RPM spec):
 
 - libgtk-3-0
 - libnss3
 - libxss1
 - libasound2t64 (or libasound2)
-- libgbm1
+- libgbm1 / mesa
 - libxshmfence1
 - libatk-bridge2.0-0
 - libdrm2

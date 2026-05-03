@@ -24,10 +24,15 @@ fn section(title: &str) {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    let build_dir = Path::new("build-tmp");
-    std::fs::create_dir_all(build_dir)?;
     std::fs::create_dir_all(&args.out_dir)?;
-    let cache = fetch::cache_dir()?;
+    let build_dir = args.out_dir.join("build-tmp");
+    let cache = args.out_dir.join("cache");
+    if build_dir.exists() {
+        std::fs::remove_dir_all(&build_dir)
+            .with_context(|| format!("removing stale {}", build_dir.display()))?;
+    }
+    std::fs::create_dir_all(&build_dir)?;
+    std::fs::create_dir_all(&cache)?;
 
     // 1. Acquire source and extract to a common (asar_path, assets_dir, version)
     let msix_path = match &args.msix {
@@ -37,7 +42,7 @@ fn main() -> Result<()> {
             fetch::download_msix_from_rg_adguard(&cache, &args.store_query, args.ring.as_str())?
         }
     };
-    let (app_asar, assets_dir, detected_version) = acquire_msix(&msix_path, build_dir)?;
+    let (app_asar, assets_dir, detected_version) = acquire_msix(&msix_path, &build_dir)?;
 
     let version = args.version.clone().unwrap_or(detected_version);
 
@@ -80,10 +85,20 @@ fn main() -> Result<()> {
 
     // 7. Stage shared package root
     section("Stage Package Root");
-    let pkg_root = package::stage(&staged_electron, &staged_assets, build_dir)?;
+    let pkg_root = package::stage(&staged_electron, &staged_assets, &build_dir)?;
     eprintln!("  pkgroot: {}", pkg_root.display());
 
     // 8. Build requested format(s)
+    if args.format.builds_arch() {
+        section("Build Arch");
+        package::build_arch(
+            &pkg_root,
+            &build_dir,
+            &version,
+            &args.maintainer,
+            &args.out_dir,
+        )?;
+    }
     if args.format.builds_deb() {
         section("Build DEB");
         package::build_deb(&pkg_root, &version, &args.maintainer, &args.out_dir)?;
@@ -92,7 +107,7 @@ fn main() -> Result<()> {
         section("Build RPM");
         package::build_rpm(
             &pkg_root,
-            build_dir,
+            &build_dir,
             &version,
             &args.maintainer,
             &args.out_dir,
@@ -101,7 +116,7 @@ fn main() -> Result<()> {
 
     // 9. Cleanup
     if !args.no_clean {
-        std::fs::remove_dir_all(build_dir)
+        std::fs::remove_dir_all(&build_dir)
             .with_context(|| format!("cleaning {}", build_dir.display()))?;
     }
 

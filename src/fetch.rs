@@ -268,19 +268,3 @@ pub fn fetch_electron(version: &str, cache_dir: &Path) -> Result<PathBuf> {
 
     Ok(electron_dir)
 }
-
-/// Return (and create) the user-level cache directory.
-pub fn cache_dir() -> Result<PathBuf> {
-    let base = std::env::var("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| home().join(".cache"));
-    let dir = base.join("chatgpt-linux-desktop");
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir)
-}
-
-fn home() -> PathBuf {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp"))
-}

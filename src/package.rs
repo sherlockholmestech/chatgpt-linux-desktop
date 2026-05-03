@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 
 pub const PACKAGE_NAME: &str = "chatgpt-desktop-native";
@@ -122,6 +123,108 @@ echo "  chatgpt-alt -> $(xdg-mime query default x-scheme-handler/chatgpt-alt)"
     )?;
 
     Ok(pkg_root)
+}
+
+// ── arch ──────────────────────────────────────────────────────────────────────
+
+pub fn build_arch(
+    pkg_root: &Path,
+    work_dir: &Path,
+    version: &str,
+    maintainer: &str,
+    out_dir: &Path,
+) -> Result<PathBuf> {
+    which::which("bsdtar").context("bsdtar not found — install libarchive")?;
+
+    let arch_version = arch_pkgver(version);
+    let arch_root = work_dir.join("archpkg");
+    if arch_root.exists() {
+        std::fs::remove_dir_all(&arch_root)
+            .with_context(|| format!("removing {}", arch_root.display()))?;
+    }
+    std::fs::create_dir_all(&arch_root)?;
+    copy_dir(pkg_root, &arch_root)?;
+
+    let installed_size = installed_size(pkg_root)?;
+    let build_date = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before the Unix epoch")?
+        .as_secs();
+
+    write_file(
+        &arch_root.join(".PKGINFO"),
+        &format!(
+            "pkgname = {PACKAGE_NAME}\n\
+             pkgbase = {PACKAGE_NAME}\n\
+             pkgver = {arch_version}-1\n\
+             pkgdesc = {DESCRIPTION}\n\
+             builddate = {build_date}\n\
+             packager = {maintainer}\n\
+             size = {installed_size}\n\
+             arch = x86_64\n\
+             license = custom:proprietary\n\
+             depend = gtk3\n\
+             depend = nss\n\
+             depend = libxss\n\
+             depend = alsa-lib\n\
+             depend = mesa\n\
+             depend = libxshmfence\n\
+             depend = at-spi2-core\n\
+             depend = libdrm\n\
+             depend = libxkbcommon\n\
+             depend = xdg-utils\n"
+        ),
+    )?;
+
+    write_file(
+        &arch_root.join(".INSTALL"),
+        "post_install() {\n  update-desktop-database /usr/share/applications >/dev/null 2>&1 || true\n}\n\npost_upgrade() {\n  post_install\n}\n\npost_remove() {\n  update-desktop-database /usr/share/applications >/dev/null 2>&1 || true\n}\n",
+    )?;
+
+    let out = out_dir.join(format!(
+        "{PACKAGE_NAME}-{arch_version}-1-x86_64.pkg.tar.zst"
+    ));
+    let out_abs = std::fs::canonicalize(out_dir)
+        .with_context(|| format!("resolving {}", out_dir.display()))?
+        .join(
+            out.file_name()
+                .context("Arch package output path has no file name")?,
+        );
+    let status = std::process::Command::new("bsdtar")
+        .arg("--zstd")
+        .arg("-cf")
+        .arg(&out_abs)
+        .args([".PKGINFO", ".INSTALL", "opt", "usr"])
+        .current_dir(&arch_root)
+        .status()
+        .context("running bsdtar")?;
+
+    if !status.success() {
+        anyhow::bail!("bsdtar failed with {status}");
+    }
+    eprintln!("  built: {}", out.display());
+    Ok(out)
+}
+
+fn arch_pkgver(version: &str) -> String {
+    version
+        .chars()
+        .map(|c| match c {
+            '-' | ':' => '_',
+            c => c,
+        })
+        .collect()
+}
+
+fn installed_size(pkg_root: &Path) -> Result<u64> {
+    let mut size = 0;
+    for entry in WalkDir::new(pkg_root) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            size += entry.metadata()?.len();
+        }
+    }
+    Ok(size)
 }
 
 // ── deb ───────────────────────────────────────────────────────────────────────

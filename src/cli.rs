@@ -33,7 +33,7 @@ pub struct Args {
     pub out_dir: PathBuf,
 
     /// Package format to build
-    #[arg(long, value_enum, default_value = "rpm")]
+    #[arg(long, value_enum, default_value = "arch")]
     pub format: Format,
 
     /// Electron version to bundle (from GitHub releases)
@@ -51,6 +51,7 @@ pub struct Args {
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum Format {
+    Arch,
     Deb,
     Rpm,
     Both,
@@ -76,6 +77,9 @@ impl Ring {
 }
 
 impl Format {
+    pub fn builds_arch(&self) -> bool {
+        matches!(self, Format::Arch | Format::Both)
+    }
     pub fn builds_deb(&self) -> bool {
         matches!(self, Format::Deb | Format::Both)
     }
