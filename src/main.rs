@@ -10,12 +10,8 @@ use clap::Parser;
 use cli::Args;
 use std::path::{Path, PathBuf};
 
-const ICON_256_PNG: &[u8] = include_bytes!(
-    "icon/icnsFile_4bb691b5e9d5669d3512f34f842f074c_ChatGPT__Dark___macOS_26.2___256x256x32.png"
-);
-const ICON_32_PNG: &[u8] = include_bytes!(
-    "icon/icnsFile_4bb691b5e9d5669d3512f34f842f074c_ChatGPT__Dark___macOS_26.2___32x32x32.png"
-);
+const ICON_256_PNG: &[u8] = include_bytes!("icon/256.png");
+const ICON_32_PNG: &[u8] = include_bytes!("icon/32.png");
 
 fn section(title: &str) {
     eprintln!("\n\x1b[1;36m== {title} ==\x1b[0m");
@@ -35,20 +31,15 @@ fn main() -> Result<()> {
     std::fs::create_dir_all(&cache)?;
 
     // 1. Acquire source and extract to a common (asar_path, assets_dir, version)
-    let msix_path = match &args.msix {
-        Some(path) => path.clone(),
-        None => {
-            section("Download Payload");
-            fetch::download_msix_from_rg_adguard(&cache, &args.store_query, args.ring.as_str())?
-        }
+    let msix_path = if let Some(path) = &args.msix {
+        path.clone()
+    } else {
+        section("Download Payload");
+        fetch::download_msix_from_rg_adguard(&cache, &args.store_query, args.ring.as_str())?
     };
     let (app_asar, assets_dir, detected_version) = acquire_msix(&msix_path, &build_dir)?;
 
-    let version = args.version.clone().unwrap_or(detected_version);
-
-    if !app_asar.exists() {
-        bail!("app.asar not found at {}", app_asar.display());
-    }
+    let version = args.pkg_version.clone().unwrap_or(detected_version);
 
     // 2. Extract ASAR
     section("Extract ASAR");
@@ -68,7 +59,7 @@ fn main() -> Result<()> {
     eprintln!("  staged electron v{}", args.electron_version);
 
     // 5. Pack patched app into electron resources
-    let _ = std::fs::remove_file(staged_electron.join("resources/default_app.asar"));
+    std::fs::remove_file(staged_electron.join("resources/default_app.asar")).ok();
     let new_asar = staged_electron.join("resources/app.asar");
     asar::pack(&app_src, &new_asar).context("packing app.asar")?;
     eprintln!("  packed app.asar");

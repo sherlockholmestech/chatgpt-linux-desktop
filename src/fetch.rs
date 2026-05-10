@@ -11,15 +11,23 @@ const UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, lik
 // ── internal download ─────────────────────────────────────────────────────────
 
 fn progress_bar(total: Option<u64>) -> ProgressBar {
-    let pb = ProgressBar::new(total.unwrap_or(0));
-    pb.set_style(
-        ProgressStyle::with_template(
-            "  {spinner:.cyan} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})",
-        )
-        .unwrap()
-        .progress_chars("=>-"),
-    );
-    pb
+    if let Some(total) = total {
+        let pb = ProgressBar::new(total);
+        pb.set_style(
+            ProgressStyle::with_template(
+                "  {spinner:.cyan} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})",
+            )
+            .unwrap()
+            .progress_chars("=>-"),
+        );
+        pb
+    } else {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::with_template("  {spinner:.cyan} {bytes} downloaded").unwrap(),
+        );
+        pb
+    }
 }
 
 fn download(url: &str, dest: &Path) -> Result<()> {
@@ -38,7 +46,7 @@ fn download(url: &str, dest: &Path) -> Result<()> {
     let mut reader = resp.into_body().into_reader();
     let mut file =
         std::fs::File::create(dest).with_context(|| format!("creating {}", dest.display()))?;
-    let mut buf = [0u8; 65536];
+    let mut buf = vec![0u8; 65536];
     loop {
         let n = reader.read(&mut buf)?;
         if n == 0 {
@@ -129,6 +137,9 @@ fn strip_tags(s: &str) -> String {
 }
 
 fn parse_rg_adguard_html(body: &str) -> Vec<RgFile> {
+    // rg-adguard returns an HTML table whose download targets are ordinary
+    // anchors. The anchor text is usually the filename, with the href as a
+    // fallback source when the text is empty.
     let mut out = Vec::new();
     let mut rest = body;
     let anchor_start = "<a";
@@ -138,7 +149,7 @@ fn parse_rg_adguard_html(body: &str) -> Vec<RgFile> {
         let Some(tag_end) = after_a.find('>') else {
             break;
         };
-        let tag = &after_a[..tag_end + 1];
+        let tag = &after_a[..=tag_end];
         let Some(href_pos) = tag.find("href=\"") else {
             rest = &after_a[tag_end + 1..];
             continue;
@@ -179,6 +190,44 @@ fn parse_rg_adguard_html(body: &str) -> Vec<RgFile> {
     }
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_package_candidate_filters_metadata_and_keeps_packages() {
+        assert!(is_package_candidate("ChatGPT_1.0_x64.msix"));
+        assert!(is_package_candidate("ChatGPT_1.0.msixbundle"));
+        assert!(!is_package_candidate("ChatGPT_1.0_x64.blockmap"));
+        assert!(!is_package_candidate("ChatGPT_1.0_x64.eappx"));
+        assert!(!is_package_candidate("ChatGPT_1.0_symbols.msix"));
+    }
+
+    #[test]
+    fn classify_score_prefers_bundle_then_x64_then_neutral() {
+        assert!(classify_score("ChatGPT_x64.msixbundle") > classify_score("ChatGPT_x64.msix"));
+        assert!(classify_score("ChatGPT_x64.msix") > classify_score("ChatGPT_arm64.msix"));
+        assert!(classify_score("ChatGPT_neutral.msix") > classify_score("ChatGPT_arm64.msix"));
+        assert!(classify_score("ChatGPT_x64.blockmap") < 0);
+    }
+
+    #[test]
+    fn parse_rg_adguard_html_reads_anchor_text_and_href() {
+        let files = parse_rg_adguard_html(
+            r#"<table>
+              <a href="https://example.test/file.msix?x=1">ChatGPT_x64.msix</a>
+              <a href="https://example.test/fallback.msix"></a>
+              <a href="/relative.msix">ignored.msix</a>
+            </table>"#,
+        );
+
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].filename, "ChatGPT_x64.msix");
+        assert_eq!(files[0].url, "https://example.test/file.msix?x=1");
+        assert_eq!(files[1].filename, "fallback.msix");
+    }
 }
 
 pub fn download_msix_from_rg_adguard(

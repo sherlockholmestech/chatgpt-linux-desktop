@@ -139,8 +139,8 @@ chatgpt-linux-desktop
 |-----------------------------|----------------------------------------|----------------------------------------------------------|
 | `--msix PATH`               | auto-fetch via rg-adguard              | Path to a local MSIX/MSIXBundle                          |
 | `--store-query QUERY`       | Microsoft Store URL                    | Query passed to rg-adguard for auto-fetch                |
-| `--ring`                    | `retail`                               | Update ring: `retail`, `rp`, `wif`, `wis`               |
-| `--version VERSION`         | detected from MSIX                     | Override package version string                          |
+| `--ring`                    | `retail`                               | Update ring: `retail` (stable), `rp`, `wif`, `wis`      |
+| `--pkg-version VERSION`     | detected from MSIX                     | Override package version string                          |
 | `--out-dir DIR`             | `dist`                                 | Output directory for downloads, unpacking, staging, and built packages |
 | `--format FORMAT`           | `arch`                                 | Package format: `arch`, `deb`, `rpm`, `both`             |
 | `--electron-version VERSION`| `41.2.2`                               | Electron version to bundle from GitHub releases         |

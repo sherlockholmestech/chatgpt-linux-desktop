@@ -1,4 +1,5 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
+use std::os::unix::fs as unix_fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -18,13 +19,24 @@ pub fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
         if rel.as_os_str().is_empty() {
             continue;
         }
-        let dest = dst.join(rel);
+        let target_path = dst.join(rel);
         if entry.file_type().is_dir() {
-            std::fs::create_dir_all(&dest)?;
+            std::fs::create_dir_all(&target_path)?;
         } else if entry.file_type().is_file() {
-            std::fs::copy(entry.path(), &dest)?;
+            if let Some(parent) = target_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(entry.path(), &target_path)?;
             let mode = entry.metadata()?.permissions().mode();
-            std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(mode))?;
+            std::fs::set_permissions(&target_path, std::fs::Permissions::from_mode(mode))?;
+        } else if entry.file_type().is_symlink() {
+            if let Some(parent) = target_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let target = std::fs::read_link(entry.path())
+                .with_context(|| format!("reading symlink {}", entry.path().display()))?;
+            unix_fs::symlink(&target, &target_path)
+                .with_context(|| format!("copying symlink {}", entry.path().display()))?;
         }
     }
     Ok(())
@@ -54,20 +66,26 @@ pub fn stage(electron_dir: &Path, assets_dir: &Path, work_dir: &Path) -> Result<
     let bin_dir = pkg_root.join("usr/bin");
     let app_dir = pkg_root.join("usr/share/applications");
     let icon_dir = pkg_root.join("usr/share/icons/hicolor/256x256/apps");
+    let license_dir = pkg_root.join(format!("usr/share/licenses/{PACKAGE_NAME}"));
 
     std::fs::create_dir_all(&install_root)?;
     std::fs::create_dir_all(&bin_dir)?;
     std::fs::create_dir_all(&app_dir)?;
     std::fs::create_dir_all(&icon_dir)?;
+    std::fs::create_dir_all(&license_dir)?;
 
     // electron binaries + app.asar already packed inside
     let electron_install_dir = install_root.join("electron");
     copy_dir(electron_dir, &electron_install_dir)?;
     let generic_electron = electron_install_dir.join("electron");
-    if generic_electron.exists() {
-        std::fs::rename(&generic_electron, electron_install_dir.join(PACKAGE_NAME))
-            .with_context(|| format!("renaming {}", generic_electron.display()))?;
+    if !generic_electron.exists() {
+        bail!(
+            "Electron binary not found at {}; downloaded archive may be incomplete",
+            generic_electron.display()
+        );
     }
+    std::fs::rename(&generic_electron, electron_install_dir.join(PACKAGE_NAME))
+        .with_context(|| format!("renaming {}", generic_electron.display()))?;
     // official app assets (icons, sounds, etc.)
     copy_dir(assets_dir, &install_root.join("assets"))?;
 
@@ -120,6 +138,11 @@ echo "  chatgpt-alt -> $(xdg-mime query default x-scheme-handler/chatgpt-alt)"
              X-GNOME-WMClass={PACKAGE_NAME}\n\
              MimeType=x-scheme-handler/chatgpt;x-scheme-handler/chatgpt-alt;\n"
         ),
+    )?;
+
+    write_file(
+        &license_dir.join("LICENSE"),
+        "This package repackages the official ChatGPT application.\nAll rights reserved by OpenAI.\n",
     )?;
 
     Ok(pkg_root)
@@ -249,7 +272,7 @@ pub fn build_deb(
              Priority: optional\n\
              Architecture: amd64\n\
              Maintainer: {maintainer}\n\
-             Depends: libgtk-3-0, libnss3, libxss1, libasound2t64 | libasound2, libgbm1, libxshmfence1, libatk-bridge2.0-0, libdrm2, libxkbcommon0\n\
+             Depends: libgtk-3-0, libnss3, libxss1, libasound2t64 | libasound2, libgbm1, libxshmfence1, libatk-bridge2.0-0, libdrm2, libxkbcommon0, xdg-utils\n\
              Description: {DESCRIPTION}\n"
         ),
     )?;
@@ -336,7 +359,8 @@ pub fn build_rpm(
              /usr/bin/{PACKAGE_NAME}\n\
              /usr/bin/{PACKAGE_NAME}-register\n\
              /usr/share/applications/{PACKAGE_NAME}.desktop\n\
-             /usr/share/icons/hicolor/256x256/apps/{PACKAGE_NAME}.png\n"
+             /usr/share/icons/hicolor/256x256/apps/{PACKAGE_NAME}.png\n\
+             /usr/share/licenses/{PACKAGE_NAME}/LICENSE\n"
         ),
     )?;
 
