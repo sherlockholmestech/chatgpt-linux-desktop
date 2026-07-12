@@ -7,17 +7,17 @@ pub const DEFAULT_ELECTRON_VERSION: &str = "41.2.2";
 #[command(
     name = "chatgpt-linux-desktop",
     version,
-    about = "Repack the official ChatGPT Windows MSIX into a native Linux package",
+    about = "Repack the official ChatGPT Classic Windows MSIX into a native Linux package",
     after_help = "EXAMPLES:\n  chatgpt-linux-desktop --format deb\n  chatgpt-linux-desktop --msix ./ChatGPT.msixbundle --no-clean\n  chatgpt-linux-desktop --pkg-version 1.2026.100"
 )]
 pub struct Args {
-    /// Path to the ChatGPT MSIXBundle.
+    /// Path to the ChatGPT Classic MSIXBundle.
     /// If omitted, the tool auto-fetches via rg-adguard.
     #[arg(long, value_name = "PATH")]
     pub msix: Option<PathBuf>,
 
     /// Store URL/Product ID used for rg-adguard auto-fetch.
-    /// Default is the official ChatGPT Store listing.
+    /// Default is the official ChatGPT Classic Store listing.
     #[arg(
         long,
         value_name = "QUERY",

@@ -1,44 +1,58 @@
 use anyhow::{Context, Result, bail};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-// Each tuple is (exact string to find, replacement). Order matters.
-const PATCHES: &[(&str, &str)] = &[
-    (
-        "const _ua = process.platform === \"darwin\", Mua = process.platform === \"win32\";",
-        "const _ua = process.platform === \"darwin\", Mua = process.platform === \"win32\", oqa_linux = process.platform === \"linux\";",
-    ),
-    (
-        "if (_ua)\n    return u();",
-        "if (_ua || oqa_linux)\n    return u();",
-    ),
-    (
-        "  getBuildOsIdentifier() {\n    return `Mac OS X ${hu.release()}`;\n  }",
-        "  getBuildOsIdentifier() {\n    return process.platform === \"linux\" ? `Linux ${hu.release()}` : `Mac OS X ${hu.release()}`;\n  }",
-    ),
-    (
-        "  applyMainWindowStyle(u) {\n    u.setVibrancy(\"sidebar\");\n  }",
-        "  applyMainWindowStyle(u) {\n    process.platform === \"darwin\" && u.setVibrancy(\"sidebar\");\n  }",
-    ),
-    (
-        "  applyCompanionWindowStyle(u) {\n    u.setVibrancy(\"hud\");\n  }",
-        "  applyCompanionWindowStyle(u) {\n    process.platform === \"darwin\" && u.setVibrancy(\"hud\");\n  }",
-    ),
-    (
-        "  createTray() {\n    const u = jnr.createFromPath(Tg.join(oor(), \"TrayTemplate.png\"));\n    return this.tray = new znr(u), this.tray;\n  }",
-        "  createTray() {\n    const u = process.platform === \"linux\" ? $Ye() : jnr.createFromPath(Tg.join(oor(), \"TrayTemplate.png\"));\n    return this.tray = new znr(u), this.tray;\n  }",
-    ),
-    (
-        "function jpa() {\n  try {",
-        "function jpa() {\n  if (process.platform === \"linux\")\n    return hu.hostname();\n  try {",
-    ),
-    (
-        "function $Ye() {\n  const e = pca() === \"dark\" ? \"TrayDark.ico\" : \"TrayLight.ico\";\n  return jnr.createFromPath(Tg.join(oor(), e));\n}",
-        "function $Ye() {\n  if (process.platform === \"linux\") {\n    const assetDir = Tg.resolve(process.resourcesPath, \"..\", \"..\", \"assets\");\n    return jnr.createFromPath(Tg.join(assetDir, \"TrayTemplateDark.png\"));\n  }\n  const e = pca() === \"dark\" ? \"TrayDark.ico\" : \"TrayLight.ico\";\n  return jnr.createFromPath(Tg.join(oor(), e));\n}",
-    ),
+struct Patch {
+    from: &'static str,
+    to: &'static str,
+}
+
+// Each patch is an exact string to find and its replacement. Order matters.
+const MAIN_PATCHES: &[Patch] = &[
+    Patch {
+        from: "const _ua = process.platform === \"darwin\", Mua = process.platform === \"win32\";",
+        to: "const _ua = process.platform === \"darwin\", Mua = process.platform === \"win32\", oqa_linux = process.platform === \"linux\";",
+    },
+    Patch {
+        from: "if (_ua)\n    return u();",
+        to: "if (_ua || oqa_linux)\n    return u();",
+    },
+    Patch {
+        from: "  getBuildOsIdentifier() {\n    return `Mac OS X ${hu.release()}`;\n  }",
+        to: "  getBuildOsIdentifier() {\n    return process.platform === \"linux\" ? `Linux ${hu.release()}` : `Mac OS X ${hu.release()}`;\n  }",
+    },
+    Patch {
+        from: "  applyMainWindowStyle(u) {\n    u.setVibrancy(\"sidebar\");\n  }",
+        to: "  applyMainWindowStyle(u) {\n    process.platform === \"darwin\" && u.setVibrancy(\"sidebar\");\n  }",
+    },
+    Patch {
+        from: "  applyCompanionWindowStyle(u) {\n    u.setVibrancy(\"hud\");\n  }",
+        to: "  applyCompanionWindowStyle(u) {\n    process.platform === \"darwin\" && u.setVibrancy(\"hud\");\n  }",
+    },
+    Patch {
+        // Match only the stable beginning of the macOS tray implementation.
+        // The path-module identifier is minified and changes between releases.
+        from: "  createTray() {\n    const u = jnr.createFromPath(",
+        to: "  createTray() {\n    const u = process.platform === \"linux\" ? $Ye() : jnr.createFromPath(",
+    },
+    Patch {
+        from: "function jpa() {\n  try {",
+        to: "function jpa() {\n  if (process.platform === \"linux\")\n    return hu.hostname();\n  try {",
+    },
+    Patch {
+        // Insert the Linux branch without referring to the release-specific,
+        // minified path-module identifier used by the Windows implementation.
+        from: "function $Ye() {\n",
+        to: "function $Ye() {\n  if (process.platform === \"linux\") {\n    const assetPath = `${process.resourcesPath}/../../assets/TrayTemplateDark.png`;\n    return jnr.createFromPath(assetPath);\n  }\n",
+    },
 ];
 
+const APP_BOOTSTRAP_PATCHES: &[Patch] = &[Patch {
+    from: "Gu(), await Promise.allSettled(t), we().getState().appReady(), Pe && console.log(e);",
+    to: "Gu(), await Promise.allSettled(t), we().getState().appReady();\n    const c = process.argv.find((u) => u.startsWith(`${ut.defaultDesktopURLScheme}://`) || u.startsWith(`${ut.altDesktopURLScheme}://`));\n    c && bi(c), Pe && console.log(e);",
+}];
+
 /// Find the vite-built main JS in `app_dir/.vite/build/main-*.js`.
-fn find_main_js(app_dir: &Path) -> Result<std::path::PathBuf> {
+fn find_build_js(app_dir: &Path, prefix: &str) -> Result<PathBuf> {
     let build_dir = app_dir.join(".vite/build");
     for entry in
         std::fs::read_dir(&build_dir).with_context(|| format!("reading {}", build_dir.display()))?
@@ -46,35 +60,51 @@ fn find_main_js(app_dir: &Path) -> Result<std::path::PathBuf> {
         let entry = entry?;
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if name.starts_with("main-") && name.ends_with(".js") {
+        if name.starts_with(prefix) && name.ends_with(".js") {
             return Ok(entry.path());
         }
     }
-    bail!("no main-*.js found in {}", build_dir.display())
+    bail!("no {prefix}*.js found in {}", build_dir.display())
 }
 
 pub fn apply(app_dir: &Path) -> Result<()> {
-    let js_path = find_main_js(app_dir)?;
+    let main_js_path = find_build_js(app_dir, "main-")?;
+    let app_bootstrap_path = find_build_js(app_dir, "app-bootstrap-")?;
+
+    // Prepare both files before writing either one. If a new upstream release
+    // changes any target, the extracted app remains untouched and can be
+    // inspected or retried without being left half-patched.
+    let patched_main = prepare_patches(&main_js_path, MAIN_PATCHES)?;
+    let patched_app_bootstrap = prepare_patches(&app_bootstrap_path, APP_BOOTSTRAP_PATCHES)?;
+
+    std::fs::write(&main_js_path, patched_main)?;
+    std::fs::write(&app_bootstrap_path, patched_app_bootstrap)?;
+    eprintln!(
+        "  {} patches applied",
+        MAIN_PATCHES.len() + APP_BOOTSTRAP_PATCHES.len()
+    );
+    Ok(())
+}
+
+fn prepare_patches(js_path: &Path, patches: &[Patch]) -> Result<String> {
     eprintln!("  patching {}", js_path.display());
 
-    let mut src = std::fs::read_to_string(&js_path)
+    let mut src = std::fs::read_to_string(js_path)
         .with_context(|| format!("reading {}", js_path.display()))?;
 
-    for (from, to) in PATCHES {
-        if !src.contains(from) {
-            let context = diagnostic_context(&src, from);
+    for patch in patches {
+        if !src.contains(patch.from) {
+            let context = diagnostic_context(&src, patch.from);
             bail!(
                 "patch target not found (app may have updated):\n  expected: {}\n  nearest context: {}",
-                preview(from, 120),
+                preview(patch.from, 120),
                 context.unwrap_or_else(|| "no related context found".to_string())
             );
         }
-        src = src.replacen(from, to, 1);
+        src = src.replacen(patch.from, patch.to, 1);
     }
 
-    std::fs::write(&js_path, src)?;
-    eprintln!("  {} patches applied", PATCHES.len());
-    Ok(())
+    Ok(src)
 }
 
 fn preview(value: &str, max_chars: usize) -> String {
@@ -125,20 +155,36 @@ mod tests {
         let root = temp_dir("patch-apply");
         let build = root.join(".vite/build");
         std::fs::create_dir_all(&build).unwrap();
-        let js_path = build.join("main-test.js");
-        let src = PATCHES
+        let main_js_path = build.join("main-test.js");
+        let main_src = MAIN_PATCHES
             .iter()
-            .map(|(from, _)| *from)
+            .map(|patch| patch.from)
             .collect::<Vec<_>>()
             .join("\n\n");
-        std::fs::write(&js_path, src).unwrap();
+        std::fs::write(&main_js_path, main_src).unwrap();
+        let app_bootstrap_path = build.join("app-bootstrap-test.js");
+        let app_bootstrap_src = APP_BOOTSTRAP_PATCHES
+            .iter()
+            .map(|patch| patch.from)
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        std::fs::write(&app_bootstrap_path, app_bootstrap_src).unwrap();
 
         apply(&root).unwrap();
 
-        let patched = std::fs::read_to_string(&js_path).unwrap();
-        for (from, to) in PATCHES {
-            assert!(!patched.contains(from));
-            assert!(patched.contains(to));
+        let patched_main = std::fs::read_to_string(&main_js_path).unwrap();
+        for patch in MAIN_PATCHES {
+            if !patch.to.contains(patch.from) {
+                assert!(!patched_main.contains(patch.from));
+            }
+            assert!(patched_main.contains(patch.to));
+        }
+        let patched_app_bootstrap = std::fs::read_to_string(&app_bootstrap_path).unwrap();
+        for patch in APP_BOOTSTRAP_PATCHES {
+            if !patch.to.contains(patch.from) {
+                assert!(!patched_app_bootstrap.contains(patch.from));
+            }
+            assert!(patched_app_bootstrap.contains(patch.to));
         }
 
         std::fs::remove_dir_all(root).unwrap();
@@ -154,10 +200,38 @@ mod tests {
             "function $Ye() {\n  changed();\n}",
         )
         .unwrap();
+        std::fs::write(
+            build.join("app-bootstrap-test.js"),
+            APP_BOOTSTRAP_PATCHES[0].from,
+        )
+        .unwrap();
 
         let err = apply(&root).unwrap_err().to_string();
         assert!(err.contains("patch target not found"));
         assert!(err.contains("nearest context"));
+
+        let main = std::fs::read_to_string(build.join("main-test.js")).unwrap();
+        assert_eq!(main, "function $Ye() {\n  changed();\n}");
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn apply_does_not_write_main_when_bootstrap_patch_is_missing() {
+        let root = temp_dir("patch-atomic");
+        let build = root.join(".vite/build");
+        std::fs::create_dir_all(&build).unwrap();
+        let main_src = MAIN_PATCHES
+            .iter()
+            .map(|patch| patch.from)
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let main_path = build.join("main-test.js");
+        std::fs::write(&main_path, &main_src).unwrap();
+        std::fs::write(build.join("app-bootstrap-test.js"), "changed bootstrap").unwrap();
+
+        assert!(apply(&root).is_err());
+        assert_eq!(std::fs::read_to_string(main_path).unwrap(), main_src);
 
         std::fs::remove_dir_all(root).unwrap();
     }

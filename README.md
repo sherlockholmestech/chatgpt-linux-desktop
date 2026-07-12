@@ -1,8 +1,8 @@
 # chatgpt-linux-desktop
 
-Repack the official ChatGPT Windows MSIX into a native Linux Electron package.
+Repack the official ChatGPT Classic Windows MSIX into a native Linux Electron package.
 
-This tool downloads the official ChatGPT Windows MSIX/MSIXBundle, extracts the app and its assets, patches the JavaScript bundle to work on Linux, and bundles it into a native Linux package (Arch, DEB, or RPM).
+This tool downloads the official Windows MSIX/MSIXBundle for the previous ChatGPT desktop app, now named **ChatGPT Classic**, extracts the app and its assets, patches the JavaScript bundle to work on Linux, and bundles it into a native Linux package (Arch, DEB, or RPM).
 
 ---
 
@@ -46,7 +46,7 @@ chatgpt-linux-desktop
 ```
 
 This will:
-1. Download the latest ChatGPT MSIX from the Microsoft Store via rg-adguard
+1. Download the latest ChatGPT Classic MSIX from the Microsoft Store via rg-adguard
 2. Extract the app and assets
 3. Patch the JavaScript for Linux compatibility
 4. Download Electron and bundle everything into an Arch package
@@ -111,7 +111,7 @@ chatgpt-linux-desktop
 
 ## How It Works
 
-1. **Acquire MSIX** — Downloads the official ChatGPT MSIXBundle from the Microsoft Store (via rg-adguard) or uses a local file you provide.
+1. **Acquire MSIX** — Downloads the official ChatGPT Classic MSIXBundle from the Microsoft Store (via rg-adguard) or uses a local file you provide.
 
 2. **Extract payload** — Unwraps the MSIX/MSIXBundle and extracts `app.asar` and the `assets/` directory (containing icons, sounds, etc.).
 
@@ -119,13 +119,14 @@ chatgpt-linux-desktop
    - Disables macOS-only voice read-aloud functionality on Linux
    - Removes macOS-only window vibrancy effects
    - Fixes Linux hostname detection
+   - Handles startup URL deep links after the latest app bootstrap finishes loading
    - **Fixes tray icon path resolution** — the original app uses `app.isPackaged` to locate assets, which resolves incorrectly on Linux and points inside the asar instead of the real `assets/` directory. The patch makes Linux use `process.resourcesPath` to reliably find the tray icons.
 
 4. **Fetch Electron** — Downloads a matching Electron binary from GitHub releases.
 
 5. **Bundle** — Packs the patched app into Electron and stages all assets.
 
-6. **Apply custom icons** — Writes the bundled dark-themed ChatGPT icons into the staged assets:
+6. **Apply custom icons** — Writes the bundled dark-themed ChatGPT Classic icons into the staged assets:
    - `TrayTemplateDark.png` (32×32, used for the tray)
    - `AppList.targetsize-256.png` (256×256, used for the desktop/menus icon)
 
@@ -151,7 +152,7 @@ chatgpt-linux-desktop
 
 ## Custom Icons
 
-The tray icon and the desktop/app icon are replaced during the build process with dark-themed ChatGPT icons extracted from the official macOS `.icns` resource.
+The tray icon and the desktop/app icon are replaced during the build process with dark-themed ChatGPT Classic icons extracted from the official macOS `.icns` resource.
 
 The icon replacement is handled by `apply_custom_icons()` in `src/main.rs`, which:
 1. Writes `TrayTemplateDark.png` (32×32 PNG) from the embedded dark-themed macOS icon

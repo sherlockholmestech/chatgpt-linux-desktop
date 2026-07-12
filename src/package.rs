@@ -6,7 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 
 pub const PACKAGE_NAME: &str = "chatgpt-desktop-native";
-const DESCRIPTION: &str = "ChatGPT desktop app repackaged from the official Windows MSIX into a native Linux Electron package";
+const APP_NAME: &str = "ChatGPT Classic";
+const DESCRIPTION: &str = "ChatGPT Classic desktop app repackaged from the official Windows MSIX into a native Linux Electron package";
 const DESKTOP_FILE: &str = "chatgpt-desktop-native.desktop";
 
 // ── filesystem helpers ────────────────────────────────────────────────────────
@@ -93,7 +94,15 @@ pub fn stage(electron_dir: &Path, assets_dir: &Path, work_dir: &Path) -> Result<
     write_exec(
         &bin_dir.join(PACKAGE_NAME),
         &format!(
-            "#!/usr/bin/env bash\nset -euo pipefail\nexport CHROME_DESKTOP={DESKTOP_FILE}\nexec /opt/{PACKAGE_NAME}/electron/{PACKAGE_NAME} --no-sandbox --class={PACKAGE_NAME} \"$@\"\n"
+            r#"#!/usr/bin/env bash
+set -euo pipefail
+export CHROME_DESKTOP={DESKTOP_FILE}
+if command -v xdg-mime >/dev/null 2>&1; then
+  xdg-mime default "{DESKTOP_FILE}" x-scheme-handler/chatgpt >/dev/null 2>&1 || true
+  xdg-mime default "{DESKTOP_FILE}" x-scheme-handler/chatgpt-alt >/dev/null 2>&1 || true
+fi
+exec /opt/{PACKAGE_NAME}/electron/{PACKAGE_NAME} --no-sandbox --class={PACKAGE_NAME} "$@"
+"#
         ),
     )?;
 
@@ -127,8 +136,8 @@ echo "  chatgpt-alt -> $(xdg-mime query default x-scheme-handler/chatgpt-alt)"
         &app_dir.join(DESKTOP_FILE),
         &format!(
             "[Desktop Entry]\n\
-             Name=ChatGPT\n\
-             Comment=ChatGPT Desktop\n\
+             Name={APP_NAME}\n\
+             Comment=ChatGPT Classic Desktop\n\
              Exec={PACKAGE_NAME} %u\n\
              Icon={PACKAGE_NAME}\n\
              Type=Application\n\
@@ -142,7 +151,7 @@ echo "  chatgpt-alt -> $(xdg-mime query default x-scheme-handler/chatgpt-alt)"
 
     write_file(
         &license_dir.join("LICENSE"),
-        "This package repackages the official ChatGPT application.\nAll rights reserved by OpenAI.\n",
+        "This package repackages the official ChatGPT Classic application.\nAll rights reserved by OpenAI.\n",
     )?;
 
     Ok(pkg_root)
@@ -395,4 +404,38 @@ fn find_rpm(rpm_root: &Path) -> Result<PathBuf> {
         "rpmbuild produced no .rpm file under {}",
         rpm_root.display()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn staged_desktop_entry_uses_classic_name() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "chatgpt-classic-package-{}-{suffix}",
+            std::process::id(),
+        ));
+        let electron = root.join("electron");
+        let assets = root.join("assets");
+        let work = root.join("work");
+        std::fs::create_dir_all(&electron).unwrap();
+        std::fs::create_dir_all(&assets).unwrap();
+        std::fs::write(electron.join("electron"), b"electron").unwrap();
+
+        let pkg_root = stage(&electron, &assets, &work).unwrap();
+        let desktop_entry = std::fs::read_to_string(
+            pkg_root.join(format!("usr/share/applications/{DESKTOP_FILE}")),
+        )
+        .unwrap();
+
+        assert!(desktop_entry.contains("Name=ChatGPT Classic\n"));
+        assert!(desktop_entry.contains("Comment=ChatGPT Classic Desktop\n"));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
